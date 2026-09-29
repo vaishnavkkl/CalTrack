@@ -1,0 +1,3 @@
+query DeploymentPlan($workspace: String!) {
+  workspace(workspaceId: $workspace) { id name plan customer { isTrialing trialDaysRemaining creditBalance remainingUsageCreditBalance isUsageSubscriber state } }
+}

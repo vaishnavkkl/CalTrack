@@ -1,0 +1,24 @@
+{
+  "name": "caltrack",
+  "version": "2.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors green,cyan \"npm run dev --workspace=@caltrack/api\" \"npm run dev --workspace=@caltrack/web\"",
+    "build": "npm run build --workspace=@caltrack/web",
+    "start": "npm run start --workspace=@caltrack/api",
+    "test": "npm run test --workspace=@caltrack/api",
+    "db:migrate": "npm run db:migrate --workspace=@caltrack/api",
+    "db:seed": "npm run db:seed --workspace=@caltrack/api",
+    "db:backup": "npm run db:backup --workspace=@caltrack/api",
+    "db:restore": "npm run db:restore --workspace=@caltrack/api --"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
