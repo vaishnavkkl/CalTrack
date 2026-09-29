@@ -10,6 +10,7 @@ CalTrack runs as one Node 24 service: the API serves the compiled React frontend
 - Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, a strong unique `ADMIN_PASSWORD`, and a random `SESSION_SECRET` (at least 32 bytes). The administrator is created only when the database has no users. Changing the initial password variable does not reset an existing user's password.
 - Railway supplies `PORT`. The Dockerfile builds the frontend and starts the API. `/api/health` is the health check.
 - Generate a Railway HTTPS domain for the service. Frontend and API use the same origin and secure session cookies.
+- Set `APP_ORIGIN` to the exact Railway HTTPS origin so browser-origin checks accept the hosted site.
 - Local data, secrets, build artifacts, and backups are excluded from deployment uploads. A new volume starts with an empty workspace and the configured administrator, without local demo accounts.
 
 ## Update the service
