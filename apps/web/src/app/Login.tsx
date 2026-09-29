@@ -5,8 +5,13 @@ import { ThemeToggle } from './ThemeContext';
 
 export function Login() {
   const { login } = useAuth();
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState(() => {
+    try { return localStorage.getItem('caltrack.rememberedUsername') || ''; } catch { return ''; }
+  });
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => {
+    try { return Boolean(localStorage.getItem('caltrack.rememberedUsername')); } catch { return false; }
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,7 +21,11 @@ export function Login() {
     setBusy(true);
     setError('');
     try {
-      await login(identifier, password);
+      await login(identifier, password, rememberMe);
+      try {
+        if (rememberMe) localStorage.setItem('caltrack.rememberedUsername', identifier.trim());
+        else localStorage.removeItem('caltrack.rememberedUsername');
+      } catch { /* Sign-in still works when browser storage is unavailable. */ }
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Unable to sign in.');
     } finally {
@@ -52,14 +61,16 @@ export function Login() {
           <span className="eyebrow">WELCOME BACK</span>
           <h2>Sign in to your workspace</h2>
           <p>Review new matches and stay ahead of upcoming procurement deadlines.</p>
-          <label>Username<input autoComplete="username" value={identifier} onChange={(event) => setIdentifier(event.target.value)} /></label>
+          <label>Username<input name="username" autoComplete="username" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} /></label>
           <label>Password
             <div className="password-wrap">
-              <input type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password}
+              <input name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required value={password}
                 onChange={(event) => setPassword(event.target.value)} />
               <button type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? 'Hide' : 'Show'}</button>
             </div>
           </label>
+          <label className="remember-choice"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me for 7 days</span></label>
+          <p className="password-save-hint">Your browser can save your password and fill it next time.</p>
           {error && <div className="form-error"><Icon name="info" />{error}</div>}
           <button className="button button-primary button-large" disabled={busy}>
             {busy ? <span className="spinner" /> : null}{busy ? 'Signing in…' : 'Sign in'}

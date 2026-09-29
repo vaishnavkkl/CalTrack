@@ -5,7 +5,7 @@ import type { User } from './types';
 interface AuthValue {
   user: User | null;
   loading: boolean;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string, rememberMe: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -23,8 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthValue>(() => ({
     user,
     loading,
-    login: async (identifier, password) => {
-      const result = await api.post<{ user: User }>('/auth/login', { identifier, password });
+    login: async (identifier, password, rememberMe) => {
+      const result = await api.post<{ user: User }>('/auth/login', { identifier, password, rememberMe });
       setUser(result.user);
     },
     logout: async () => {

@@ -194,6 +194,10 @@ input, select, textarea { color: var(--ink); accent-color: var(--primary); }
 .login-panel { background: var(--surface); position: relative; }
 .login-theme { position: absolute; right: 24px; top: 24px; }
 .login-card { padding-top: 40px; }
+.login-card .remember-choice { display: flex; align-items: center; gap: 9px; margin: -2px 0 8px; font-size: 12px; color: var(--ink); cursor: pointer; }
+.login-card .remember-choice input { width: 16px; height: 16px; flex: 0 0 16px; margin: 0; }
+.login-card .remember-choice span { color: var(--ink); }
+.login-card .password-save-hint { margin: 0 0 18px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .login-card input:focus { background: var(--surface-soft); border-color: var(--accent); }
 .skip-link { background: var(--surface); }
 .toast { background: #173d79; color: #fff; }

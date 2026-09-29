@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, scryptSync } from 'node:crypto';
+import { createHash, randomBytes, scryptSync } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { decodeResume, MAX_RESUME_BYTES } from './resumes.mjs';
 
@@ -20,6 +20,7 @@ test('resume validation rejects disguised and oversized uploads', () => {
 test('production serves web, protects resumes, and deletes stored files without deleting profiles', { timeout: 45000 }, async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'caltrack-upload-test-'));
   const password = randomBytes(20).toString('hex');
+  const sessionSecret = randomBytes(32).toString('hex');
   const dbPath = path.join(folder, 'test.db');
   const uploads = path.join(folder, 'uploads');
   let child, database;
@@ -28,7 +29,7 @@ test('production serves web, protects resumes, and deletes stored files without 
     child = spawn(process.execPath, [fileURLToPath(new URL('./index.mjs', import.meta.url))], { windowsHide: true, env: { ...process.env,
       NODE_ENV: 'production', PORT: '0', DB_PATH: dbPath, RESPONSE_FILES_PATH: uploads,
       ADMIN_USERNAME: 'testmanager', ADMIN_EMAIL: 'manager@example.test', ADMIN_PASSWORD: password,
-      SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
+      SESSION_SECRET: sessionSecret }, stdio: ['ignore', 'pipe', 'pipe'] });
     logs = '';
     child.stdout.on('data', (chunk) => { logs += chunk; });
     child.stderr.on('data', (chunk) => { logs += chunk; });
@@ -47,8 +48,9 @@ test('production serves web, protects resumes, and deletes stored files without 
       method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
       body: payload === undefined ? undefined : JSON.stringify(payload)
     });
-    const login = async (identifier) => {
-      const result = await request('/auth/login', 'POST', { identifier, password }); assert.equal(result.status, 200);
+    const login = async (identifier, rememberMe = false) => {
+      const result = await request('/auth/login', 'POST', { identifier, password, rememberMe }); assert.equal(result.status, 200);
+      assert.match(result.headers.get('set-cookie'), new RegExp(`Max-Age=${rememberMe ? 604800 : 86400}(?:;|$)`));
       return result.headers.get('set-cookie').split(';')[0];
     };
     const publicPage = await fetch(origin + '/response-review');
@@ -70,7 +72,14 @@ test('production serves web, protects resumes, and deletes stored files without 
       VALUES ('test', 'Software engineering services', 'Test agency', 'IT Services', 'Test', ?, ?, ?)`).run(now, now, now);
     database.prepare(`UPDATE bid_workflows SET decision = 'Qualified', sourcing_status = 'Open', sourcing_brief = 'Software developer',
       required_resources_json = ? WHERE opportunity_id = 'test'`).run(JSON.stringify([{ id: 'developer', title: 'Developer' }]));
-    const manager = await login('testmanager'), member = await login('member'), other = await login('other');
+    const manager = await login('testmanager'), member = await login('member', true), other = await login('other');
+    assert.equal(database.prepare('SELECT count(*) n FROM user_sessions').get().n, 3);
+    const memberToken = decodeURIComponent(member.split('=')[1]);
+    const memberSession = database.prepare('SELECT token_hash, expires_at FROM user_sessions WHERE token_hash = ?')
+      .get(createHash('sha256').update(memberToken).digest('hex'));
+    assert.ok(memberSession);
+    assert.ok(!member.includes(memberSession.token_hash));
+    assert.ok(Date.parse(memberSession.expires_at) - Date.now() > 6 * 86400 * 1000);
     for (let attempt = 0; attempt < 10; attempt++) {
       assert.equal((await request('/auth/login', 'POST', { identifier: 'other', password: 'wrong' })).status, 401);
     }
@@ -98,6 +107,10 @@ test('production serves web, protects resumes, and deletes stored files without 
     assert.equal(rejected.status, 400); assert.equal(database.prepare('SELECT count(*) n FROM candidates').get().n, 1);
     assert.equal(fs.readdirSync(uploads).length, 1);
     await stop(); origin = await start(); // Persistent volume paths survive service restart.
+    assert.equal((await request('/auth/me', 'GET', undefined, member)).status, 200);
+    assert.equal((await request('/auth/me', 'GET', undefined, manager)).status, 200);
+    assert.equal((await request('/auth/logout', 'POST', undefined, member)).status, 200);
+    assert.equal((await request('/auth/me', 'GET', undefined, member)).status, 401);
     const managerAgain = await login('testmanager');
     assert.equal((await request(route, 'GET', undefined, managerAgain)).status, 200);
     assert.equal((await request(route, 'DELETE', undefined, managerAgain)).status, 200);

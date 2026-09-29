@@ -13,9 +13,13 @@ CalTrack runs as one Node 24 service: the API serves the compiled React frontend
 - Set `APP_ORIGIN` to the exact Railway HTTPS origin so browser-origin checks accept the hosted site.
 - Local data, secrets, build artifacts, and backups are excluded from deployment uploads. A new volume starts with an empty workspace and the configured administrator, without local demo accounts.
 
-## Update the service
+## Updates and CI/CD
 
-Run `npm run build` and `npm test`, then `railway up --service caltrack` from the linked project root. Do not delete the volume during redeployment. Account authentication uses `railway login`.
+The `main` branch runs GitHub Actions checks: a clean install, production frontend build, API tests, and an npm security audit. Railway is connected to the GitHub repository's `main` branch and automatically deploys a successful push. Keep Railway's **Wait for CI** option enabled so a failed check cannot deploy. Pull requests run the same checks without deploying. Do not delete the volume during redeployment.
+
+For a manual release, run `npm run build` and `npm test`, then `railway up --service caltrack` from the linked project root. Account authentication uses `railway login`.
+
+Regular sign-ins last one day; choosing **Remember me for 7 days** extends the session to one week. Sessions are stored in the persistent database, so service restarts do not sign users out. The app remembers only the username in browser storage; browser password managers can save passwords using the standard sign-in form. Signing out revokes the session immediately.
 
 `railway.json` currently provides the build and health-check configuration. Railway's CLI reports this format will be retired on December 1, 2026; migrate with `railway config migrate` before then.
 

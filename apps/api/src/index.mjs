@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { config } from './config.mjs';
 import { db, mapJob, mapOpportunity, mapPortal } from './database.mjs';
 import { seed } from './seed.mjs';
@@ -13,7 +13,7 @@ import { serveWeb } from './static.mjs';
 seed();
 fs.mkdirSync(config.responseFilesPath, { recursive: true });
 
-const sessions = new Map();
+const daySeconds = 24 * 60 * 60;
 const loginFailures = new Map();
 const loginWindowMs = 15 * 60 * 1000;
 const maxLoginFailures = 10;
@@ -188,9 +188,15 @@ function parseCookies(req) {
 
 function currentUser(req) {
   const token = parseCookies(req).caltrack_session;
-  const session = token && sessions.get(token);
-  if (!session || session.expiresAt < Date.now()) return null;
-  return db.prepare('SELECT id, username, email, role, display_name displayName FROM users WHERE id = ?').get(session.userId);
+  if (!token) return null;
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const session = db.prepare('SELECT user_id, expires_at FROM user_sessions WHERE token_hash = ?').get(tokenHash);
+  if (!session) return null;
+  if (Date.parse(session.expires_at) <= Date.now()) {
+    db.prepare('DELETE FROM user_sessions WHERE token_hash = ?').run(tokenHash);
+    return null;
+  }
+  return db.prepare('SELECT id, username, email, role, display_name displayName FROM users WHERE id = ?').get(session.user_id);
 }
 
 function integrationAuthorized(req) {
@@ -391,17 +397,22 @@ const server = http.createServer(async (req, res) => {
         return send(res, 401, { error: 'Username or password is incorrect.' });
       }
       loginFailures.delete(attemptKey);
+      const durationSeconds = input.rememberMe === true ? 7 * daySeconds : daySeconds;
       const sessionId = `${randomUUID()}.${randomBytes(24).toString('hex')}`;
       const signature = createHmac('sha256', config.sessionSecret).update(sessionId).digest('base64url');
       const token = `${sessionId}.${signature}`;
-      sessions.set(token, { userId: user.id, expiresAt: Date.now() + 12 * 60 * 60 * 1000 });
-      const cookie = `caltrack_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${config.production ? '; Secure' : ''}`;
+      db.prepare('DELETE FROM user_sessions WHERE expires_at <= ?').run(new Date().toISOString());
+      db.prepare('INSERT INTO user_sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+        createHash('sha256').update(token).digest('hex'), user.id, new Date().toISOString(),
+        new Date(Date.now() + durationSeconds * 1000).toISOString()
+      );
+      const cookie = `caltrack_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${durationSeconds}${config.production ? '; Secure' : ''}`;
       return send(res, 200, { user: { id: user.id, username: user.username, email: user.email, role: user.role, displayName: user.display_name } }, { 'Set-Cookie': cookie });
     }
     if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
       const token = parseCookies(req).caltrack_session;
-      if (token) sessions.delete(token);
-      return send(res, 200, { ok: true }, { 'Set-Cookie': 'caltrack_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+      if (token) db.prepare('DELETE FROM user_sessions WHERE token_hash = ?').run(createHash('sha256').update(token).digest('hex'));
+      return send(res, 200, { ok: true }, { 'Set-Cookie': `caltrack_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${config.production ? '; Secure' : ''}` });
     }
 
     const user = currentUser(req);
