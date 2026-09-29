@@ -22,8 +22,10 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
   const pageIcon = ({ '/dashboard': 'dashboard', '/opportunities': 'search', '/bid-decisions': 'briefcase', '/talent-sourcing': 'users', '/response-review': 'checklist', '/portal-controls': 'portal', '/collection-jobs': 'jobs', '/settings': 'settings' } as Record<string, string>)[location.pathname] || 'dashboard';
   const meta = titles[location.pathname] || titles['/dashboard'];
   const isManagement = user?.role === 'super_admin';
@@ -46,6 +48,22 @@ export function Shell() {
     window.addEventListener('keydown', focusSearch);
     return () => window.removeEventListener('keydown', focusSearch);
   }, []);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [accountOpen]);
 
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -87,7 +105,7 @@ export function Shell() {
         </div>
       </aside>
       <div className="workspace">
-        <header className="topbar">
+        <header className={`topbar ${accountOpen ? 'topbar-account-open' : ''}`}>
           <button className="menu-button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Icon name="menu" /></button>
           <div className="page-title"><h1><Icon name={pageIcon} size={21} />{meta.title}</h1><p>{meta.subtitle}</p></div>
           {isManagement && <form className="global-search" onSubmit={submitSearch}>
@@ -95,7 +113,20 @@ export function Shell() {
               aria-label="Search RFOs" placeholder="Search RFOs…" /><kbd>Ctrl K</kbd>
           </form>}
           <ZoomControl /><ThemeToggle />
-          <div className="top-avatar">{initials(user?.email)}</div>
+          <div className="account-control" ref={accountRef}>
+            <button type="button" className="top-avatar account-trigger" aria-label="Open account menu"
+              aria-expanded={accountOpen} aria-controls="account-popover" onClick={() => setAccountOpen((open) => !open)}>
+              {initials(user?.email)}
+            </button>
+            {accountOpen && <div id="account-popover" className="account-popover">
+              <div className="account-popover-head">
+                <span className="avatar">{initials(user?.email)}</span>
+                <div><strong>{user?.displayName || 'CalTrack account'}</strong><small>{isManagement ? 'Bid manager' : 'Sourcing member'}</small></div>
+              </div>
+              <div className="account-popover-details"><span>@{user?.username}</span><span>{user?.email}</span></div>
+              <button type="button" className="account-signout" onClick={() => void logout()}><Icon name="logout" size={17} />Sign out</button>
+            </div>}
+          </div>
         </header>
         <main id="main-content" className="page-content">
             <Outlet /></main>

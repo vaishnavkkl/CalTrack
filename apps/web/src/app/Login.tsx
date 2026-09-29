@@ -69,7 +69,7 @@ export function Login() {
               <button type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? 'Hide' : 'Show'}</button>
             </div>
           </label>
-          <label className="remember-choice"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me for 7 days</span></label>
+          <label className="remember-choice"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
           <p className="password-save-hint">Your browser can save your password and fill it next time.</p>
           {error && <div className="form-error"><Icon name="info" />{error}</div>}
           <button className="button button-primary button-large" disabled={busy}>

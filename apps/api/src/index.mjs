@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { config } from './config.mjs';
 import { db, mapJob, mapOpportunity, mapPortal } from './database.mjs';
-import { seed } from './seed.mjs';
+import { hashPassword, seed } from './seed.mjs';
 import { runCollection } from './collector.mjs';
 import { DEFAULT_EXCLUDED_KEYWORDS, DEFAULT_IT_KEYWORDS, evaluateOpportunity } from './relevance.mjs';
 import { decodeResume } from './resumes.mjs';
@@ -418,6 +418,39 @@ const server = http.createServer(async (req, res) => {
     const user = currentUser(req);
     if (!user) return send(res, 401, { error: 'Authentication required.' });
     if (req.method === 'GET' && url.pathname === '/api/auth/me') return send(res, 200, { user });
+    if (req.method === 'POST' && url.pathname === '/api/admin/provision-requested-users') {
+      if (!requireManagement(res, user)) return;
+      const input = await body(req);
+      const passwords = [input.adminPassword, input.userPassword];
+      if (passwords.some((password) => typeof password !== 'string' || !password || password.length > 1024)) {
+        return send(res, 400, { error: 'Both passwords are required.' });
+      }
+      const accounts = [
+        { username: 'admin', email: 'admin@caltrack.local', role: 'super_admin', displayName: 'Administrator', password: passwords[0] },
+        { username: 'user', email: 'user@caltrack.local', role: 'sourcing_user', displayName: 'Sourcing user', password: passwords[1] }
+      ];
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const existing = db.prepare('SELECT username FROM users WHERE lower(username) IN (?, ?) OR lower(email) IN (?, ?)').all(
+          'admin', 'user', 'admin@caltrack.local', 'user@caltrack.local');
+        if (existing.length) {
+          db.exec('ROLLBACK');
+          return send(res, 409, { error: 'One or both requested accounts already exist.' });
+        }
+        const insert = db.prepare(`INSERT INTO users (username, email, password_hash, password_salt, role, display_name, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        const now = new Date().toISOString();
+        for (const account of accounts) {
+          const { hash, salt } = hashPassword(account.password);
+          insert.run(account.username, account.email, hash, salt, account.role, account.displayName, now, now);
+        }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+      return send(res, 201, { users: accounts.map(({ username, role }) => ({ username, role })) });
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/dashboard') {
       const sourcingOnly = user.role === 'sourcing_user';

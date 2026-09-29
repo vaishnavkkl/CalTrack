@@ -151,10 +151,21 @@ try {
       for (const route of (process.env.UI_CHECK_ROUTES || '/opportunities,/bid-decisions,/response-review,/talent-sourcing,/dashboard,/portal-controls,/collection-jobs,/settings').split(',')) {
         await send('Page.navigate', { url: origin + route });
         await ready('main');
+        if (width === 1440 && theme === 'light' && route === '/opportunities') {
+          assert.equal(await evaluate('document.documentElement.dataset.theme'), 'light', 'New sessions open in light mode');
+        }
         await evaluate(`document.querySelector('[title="Use ${theme} mode"]').click()`);
         await pause(240);
         const result = await inspect();
         report.push({ width, theme, route, ...result });
+        if (route === '/dashboard') {
+          await evaluate('document.querySelector(".account-trigger").click()');
+          assert.equal(await evaluate('document.querySelector(".account-popover-details").textContent.includes("reviewer@example.test")'), true);
+          assert.equal(await evaluate('document.querySelector(".account-signout").textContent.trim()'), 'Sign out');
+          report.push({ width, theme, route: 'account-menu', ...await inspect() });
+          await evaluate('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))');
+          assert.equal(await evaluate('document.querySelector(".account-popover")'), null);
+        }
         if (route === '/opportunities') {
           assert.equal(await evaluate('document.querySelector(".rfo-relevance .match-badge").textContent.includes("94% match")'), true, 'Match percentage remains visible');
           assert.equal(await evaluate('document.querySelector(".rfo-category").textContent'), opportunity.category);
@@ -212,6 +223,7 @@ try {
       report.push({ width, theme: 'dark', route: `zoom-${level}`, ...await inspect() });
       if (level === 75) {
         await send('Page.reload'); await ready('.zoom-reset'); await pause(150);
+        for (let attempt = 0; attempt < 20 && await evaluate('Number(document.documentElement.style.zoom)') !== .75; attempt++) await pause(50);
         assert.equal(await evaluate('Number(document.documentElement.style.zoom)'), .75);
       }
     }

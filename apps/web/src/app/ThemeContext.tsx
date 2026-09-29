@@ -6,19 +6,13 @@ const storedTheme = (): Theme | null => {
   try { const value = localStorage.getItem('caltrack.theme'); return value === 'light' || value === 'dark' ? value : null; }
   catch { return null; }
 };
-const systemTheme = (): Theme => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreference] = useState<Theme | null>(storedTheme);
-  const [system, setSystem] = useState<Theme>(systemTheme);
-  const theme = preference || system;
+  const theme = preference || 'light';
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => setSystem(media.matches ? 'dark' : 'light');
     const sync = (event: StorageEvent) => { if (event.key === 'caltrack.theme' || event.key === null) setPreference(storedTheme()); };
-    media.addEventListener('change', update);
     window.addEventListener('storage', sync);
-    return () => { media.removeEventListener('change', update); window.removeEventListener('storage', sync); };
+    return () => window.removeEventListener('storage', sync);
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
